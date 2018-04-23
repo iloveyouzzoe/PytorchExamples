@@ -4,6 +4,7 @@ from torch.utils.data.dataset import Dataset
 from torch.utils.data import DataLoader
 import pandas as pd
 from torch.autograd import Variable
+import sys
 
 
 class IrisModel(torch.nn.Module):
@@ -11,13 +12,38 @@ class IrisModel(torch.nn.Module):
     def __init__(self, input, hidden, output):
         super(IrisModel, self).__init__()
         self.layer1 = torch.nn.Linear(input, hidden)
-        self.layer2 = torch.nn.Linear(hidden, output)
+        self.layer2 = torch.nn.Linear(hidden, hidden)
+        self.layer3 = torch.nn.Linear(hidden, output)
 
     def forward(self, input):
+        sigmoid = torch.nn.Tanh()
+        relu = torch.nn.ReLU()
         out1 = self.layer1(input)
-        relu1 = out1.clamp(min=0)
-        y_pred = self.layer2(relu1)
+        out2 = self.layer2(relu(out1))
+        y_pred = self.layer3(relu(out2))
         return y_pred
+
+
+class IrisTestData(Dataset):
+
+    def __init__(self, path):
+        df = pd.read_csv(path, delimiter=',')
+        df.replace(to_replace='Iris-setosa', value=1, inplace=True)
+        df.replace(to_replace='Iris-versicolor', value=2, inplace=True)
+        df.replace(to_replace='Iris-virginica', value=3, inplace=True)
+        df = df.sample(frac=1)
+        self.X_train = df.as_matrix()[-10:, :-1]
+        self.y_train = df.as_matrix()[-10:, -1:]
+
+    def __len__(self):
+        return len(self.X_train[:, 0:])
+
+    def __getitem__(self, item):
+        data = torch.from_numpy(self.X_train[item])
+        one_hot = [0] * 3
+        one_hot[int(self.y_train[item, 0]-1)] = 1
+        label = torch.from_numpy(np.array(one_hot))
+        return data, label
 
 
 class IrisTrainData(Dataset):
@@ -27,8 +53,12 @@ class IrisTrainData(Dataset):
         df.replace(to_replace='Iris-setosa', value=1, inplace=True)
         df.replace(to_replace='Iris-versicolor', value=2, inplace=True)
         df.replace(to_replace='Iris-virginica', value=3, inplace=True)
+        df = df.sample(frac=1)
         self.X_train = df.as_matrix()[:-10, :-1]
         self.y_train = df.as_matrix()[:-10, -1:]
+
+    def __len__(self):
+        return len(self.X_train[:, 0:])
 
     def __getitem__(self, item):
         data = torch.from_numpy(self.X_train[item])
@@ -39,25 +69,49 @@ class IrisTrainData(Dataset):
 
 
 if __name__ == "__main__":
+    torch.manual_seed(50)
+    np.random.seed(100)
     path = 'C:\\Users\\Swapnil.Walke\\PycharmProjects\\PytorchExamples\\iris_data.csv'
     train_dataset = IrisTrainData(path)
-    train_loader = DataLoader(train_dataset, shuffle=True, batch_size=5, num_workers=1)
-
+    test_dataset = IrisTestData(path)
+    train_loader = DataLoader(train_dataset, shuffle=True, batch_size=1, num_workers=1)
+    test_loader = DataLoader(test_dataset, shuffle=True, batch_size=1, num_workers=1)
     inp = 4
-    hidden  = 50
+    hidden = 50
     out = 3
 
     model = IrisModel(inp, hidden, out)
-    criterion = torch.nn.MultiLabelSoftMarginLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=1e-3)
+    criterion = torch.nn.MultiLabelMarginLoss()
+    optimizer = torch.optim.Adam(model.parameters())
 
-    for _ in range(10):
-        for index, (data, label) in enumerate(train_dataset):
+    for _ in range(15):
+        for index, (data, label) in enumerate(train_loader):
             data = Variable(data.type(torch.FloatTensor))
-            label = Variable(label.type(torch.FloatTensor).view(1,3))
+            label = Variable(label.type(torch.LongTensor))
             y_pred = model(data)
-            loss = criterion(y_pred.view(1,3), label)
-
+            loss = criterion(y_pred, label)
+            print(f'Train Loss {loss.data[0]} : {_}')
             optimizer.zero_grad()
             loss.backward()
             optimizer.step()
+            for index, (data, label) in enumerate(test_loader):
+                data = Variable(data.type(torch.FloatTensor))
+                label = Variable(label.type(torch.LongTensor))
+                y_pred = model(data)
+                test_loss = criterion(y_pred, label)
+                print(f'Test Loss {_} : {test_loss.data[0]}')
+                break
+            break
+    cnt = 0.0
+    tot = 0
+    for index, (data, label) in enumerate(test_loader):
+        tot += 1
+        data = Variable(data.type(torch.FloatTensor))
+        label = Variable(label.type(torch.FloatTensor))
+        y_pred = model(data)
+        a, ind1 = torch.max(y_pred, 1)
+        b, ind2 = torch.max(label, 1)
+        if ind2.data[0] == ind1.data[0]:
+            cnt += 1
+    print(cnt)
+    print((cnt/tot)*100)
