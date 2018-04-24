@@ -51,11 +51,12 @@ class Model(Module):
         self.layer1 = torch.nn.Linear(input, hidden)
         self.layer2 = torch.nn.Linear(hidden, output)
         self.relu = torch.nn.ReLU()
+        self.sigmoid = torch.nn.Sigmoid()
 
     def forward(self, input):
-        out1 = self.relu(self.layer1(input))
+        out1 = self.sigmoid(self.layer1(input))
         out2 = self.layer2(out1)
-        return out2
+        return self.sigmoid(out2)
 
 
 if __name__ == "__main__":
@@ -67,7 +68,7 @@ if __name__ == "__main__":
     # Model params
     input = 13
     hidden = 27
-    output = 2
+    output = 1
     batch_size = 32
 
     # Load train and test data set
@@ -78,15 +79,15 @@ if __name__ == "__main__":
 
     # initialize model, criterion and optimizer
     model = Model(input, hidden, output)
-    criterion = torch.nn.CrossEntropyLoss()
-    optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
+    criterion = torch.nn.BCELoss()
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.01)
 
     for epoch in range(15):
         loss = 0.0
         for index, data in enumerate(diabetes_train):
             data, label = data
             x = Variable(data.float(), requires_grad=True)
-            y = Variable(label)
+            y = Variable(label.float())
             y_pred = model(x)
             optimizer.zero_grad()
             loss += criterion(y_pred, y)
