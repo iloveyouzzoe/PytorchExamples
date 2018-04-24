@@ -4,7 +4,6 @@ from torch.utils.data.dataset import Dataset
 from torch.utils.data import DataLoader
 import pandas as pd
 from torch.autograd import Variable
-import sys
 
 
 class IrisModel(torch.nn.Module):
@@ -28,9 +27,9 @@ class IrisTestData(Dataset):
 
     def __init__(self, path):
         df = pd.read_csv(path, delimiter=',')
-        df.replace(to_replace='Iris-setosa', value=1, inplace=True)
-        df.replace(to_replace='Iris-versicolor', value=2, inplace=True)
-        df.replace(to_replace='Iris-virginica', value=3, inplace=True)
+        df.replace(to_replace='Iris-setosa', value=0, inplace=True)
+        df.replace(to_replace='Iris-versicolor', value=1, inplace=True)
+        df.replace(to_replace='Iris-virginica', value=2, inplace=True)
         df = df.sample(frac=1)
         self.X_train = df.as_matrix()[-10:, :-1]
         self.y_train = df.as_matrix()[-10:, -1:]
@@ -40,9 +39,7 @@ class IrisTestData(Dataset):
 
     def __getitem__(self, item):
         data = torch.from_numpy(self.X_train[item])
-        one_hot = [0] * 3
-        one_hot[int(self.y_train[item, 0]-1)] = 1
-        label = torch.from_numpy(np.array(one_hot))
+        label = torch.from_numpy(self.y_train[item])
         return data, label
 
 
@@ -50,9 +47,9 @@ class IrisTrainData(Dataset):
 
     def __init__(self, path):
         df = pd.read_csv(path, delimiter=',')
-        df.replace(to_replace='Iris-setosa', value=1, inplace=True)
-        df.replace(to_replace='Iris-versicolor', value=2, inplace=True)
-        df.replace(to_replace='Iris-virginica', value=3, inplace=True)
+        df.replace(to_replace='Iris-setosa', value=0, inplace=True)
+        df.replace(to_replace='Iris-versicolor', value=1, inplace=True)
+        df.replace(to_replace='Iris-virginica', value=2, inplace=True)
         df = df.sample(frac=1)
         self.X_train = df.as_matrix()[:-10, :-1]
         self.y_train = df.as_matrix()[:-10, -1:]
@@ -62,14 +59,12 @@ class IrisTrainData(Dataset):
 
     def __getitem__(self, item):
         data = torch.from_numpy(self.X_train[item])
-        one_hot = [0] * 3
-        one_hot[int(self.y_train[item, 0]-1)] = 1
-        label = torch.from_numpy(np.array(one_hot))
+        label = torch.from_numpy(self.y_train[item])
         return data, label
 
 
 if __name__ == "__main__":
-    torch.manual_seed(50)
+    torch.manual_seed(100)
     np.random.seed(100)
     path = 'C:\\Users\\Swapnil.Walke\\PycharmProjects\\PytorchExamples\\iris_data.csv'
     train_dataset = IrisTrainData(path)
@@ -81,13 +76,17 @@ if __name__ == "__main__":
     out = 3
 
     model = IrisModel(inp, hidden, out)
-    criterion = torch.nn.MultiLabelMarginLoss()
-    optimizer = torch.optim.Adam(model.parameters())
+    # cross entropy loss needs 1D target vector
+    # squeeze the target vector before passing to criterion
+    criterion = torch.nn.CrossEntropyLoss()
+    optimizer = torch.optim.SGD(model.parameters(), lr=0.001)
 
     for _ in range(15):
         for index, (data, label) in enumerate(train_loader):
             data = Variable(data.type(torch.FloatTensor))
             label = Variable(label.type(torch.LongTensor))
+            label = label.squeeze(1)
+            # print(label)
             y_pred = model(data)
             loss = criterion(y_pred, label)
             print(f'Train Loss {loss.data[0]} : {_}')
@@ -98,6 +97,7 @@ if __name__ == "__main__":
                 data = Variable(data.type(torch.FloatTensor))
                 label = Variable(label.type(torch.LongTensor))
                 y_pred = model(data)
+                label = label.squeeze(1)
                 test_loss = criterion(y_pred, label)
                 print(f'Test Loss {_} : {test_loss.data[0]}')
                 break
